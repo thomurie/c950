@@ -2,6 +2,7 @@
 # Custom hash table implementation for WGUPS Package Routing Program
 
 from package import Package
+from typing import Optional
 
 
 class HashTable:
@@ -37,6 +38,22 @@ class HashTable:
         bucket.append((package_id, package))
         self.size += 1
         return True
+
+    def lookup(self, package_id: int) -> Optional[Package]:
+        """
+        Look up a package by its ID and return the package data.
+        """
+        # Calculate the bucket index
+        bucket_index = self._hash(package_id)
+        bucket = self.table[bucket_index]
+
+        # Search for the package in the bucket
+        for key, value in bucket:
+            if key == package_id:
+                return value
+
+        # Package not found
+        return None
 
     def __len__(self) -> int:
         """
