@@ -136,7 +136,6 @@ def assign_packages_to_trucks(hash_table: HashTable) -> tuple[Truck, Truck, Truc
     # ==========================================
     # TRUCK 1: Early deadlines and linked packages
     # ==========================================
-    # Packages with 9:00 AM or 10:30 AM deadlines that aren't delayed
     remaining_packages = set([p.package_id for p in hash_table.get_all()])
 
     truck1_packages = set(
@@ -156,8 +155,6 @@ def assign_packages_to_trucks(hash_table: HashTable) -> tuple[Truck, Truck, Truc
     # ==========================================
     remaining_packages = remaining_packages.difference(truck1_packages)
 
-    truck2_packages = [3, 5, 6, 7, 8, 10, 11, 12, 17, 18, 23, 25, 28, 32, 36, 38]
-    truck2_packages.sort()
     truck2_packages = set(
         [
             p.package_id
@@ -171,7 +168,6 @@ def assign_packages_to_trucks(hash_table: HashTable) -> tuple[Truck, Truck, Truc
     truck2_linked_packages = get_all_linked_packages(truck2_packages, hash_table)
     truck2_packages = truck2_packages.union(truck2_linked_packages)
 
-    # fill truck 2 with EOD packages from remaining till at capacity
     remaining_packages = remaining_packages.difference(truck2_packages)
     for pkg_id in remaining_packages:
         if len(truck2_packages) >= truck2.capacity:
@@ -183,7 +179,6 @@ def assign_packages_to_trucks(hash_table: HashTable) -> tuple[Truck, Truck, Truc
     # ==========================================
     # TRUCK 3: Remaining packages
     # ==========================================
-    # All packages not assigned to truck 1 or 2
     truck3_packages = remaining_packages.difference(truck2_packages)
 
     load_all_packages(truck3_packages, hash_table, truck3)
@@ -210,7 +205,7 @@ def correct_package_address(
         package.state = state
         package.zip_code = zip_code
         # Clear the wrong address note
-        package.notes = "Address corrected at 10:20 AM"
+        package.notes = package.notes + "Address corrected at 10:20 AM"
 
 
 def run_deliveries(

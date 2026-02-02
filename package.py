@@ -39,17 +39,6 @@ class Package:
     ):
         """
         Initialize a new package with all required attributes.
-
-        Args:
-            package_id (int): Unique package ID number
-            address (str): Delivery address
-            city (str): Delivery city
-            state (str): Delivery state
-            zip_code (str): Delivery ZIP code
-            deadline (str): Delivery deadline (e.g., "10:30 AM", "EOD")
-            weight (int): Package weight in kilogramss
-            notes (str): Special note
-            status (PackageStatus): Delivery status
         """
         # Inserted data
         self.package_id = int(package_id)
@@ -104,12 +93,12 @@ class Package:
     def get_linked_packages(self) -> list[int]:
         """
         Get list of package IDs that must be delivered with this package.
+        Example format: "Must be delivered with 13, 15"
         """
         if "Must be delivered with" not in self.notes:
             return []
 
         # Parse the package IDs from the notes
-        # Format: "Must be delivered with 13 15" or "Must be delivered with 15 19"
         try:
             parts = self.notes.split("Must be delivered with")[1].strip()
             # Split by space and convert to integers
