@@ -1,6 +1,7 @@
 # truck.py
 # Truck class for WGUPS Package Routing Program
 # Handles package loading, delivery routing, and mileage tracking
+from __future__ import annotations
 
 from datetime import datetime, timedelta
 from distance import get_distance, get_address_index, find_nearest, HUB_INDEX
@@ -137,3 +138,9 @@ class Truck:
         Get the time when the truck returns to the hub.
         """
         return self.current_time
+
+    def get_mileage(self) -> float:
+        """
+        Get the total mileage traveled by this truck.
+        """
+        return self.mileage

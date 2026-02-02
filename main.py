@@ -22,6 +22,7 @@ The program ensures:
 - Total mileage under 140 miles
 - All package constraints are satisfied
 """
+from __future__ import annotations
 
 import csv
 import os
@@ -274,6 +275,141 @@ def run_deliveries(
     return total_mileage
 
 
+def display_package_status(
+    hash_table: HashTable, query_time: datetime, package_id: int = None
+):
+    """
+    Display the delivery status (including the delivery time) of any package at any time
+    """
+    print("\n" + "=" * 100)
+    print(f"PACKAGE STATUS AT {query_time.strftime('%-I:%M %p')}")
+    print("=" * 100)
+
+    print(
+        f"{'ID':>3} | {'Address':<40} | {'Deadline':<10} | {'Status':<10} | {'Time':<10} | Truck"
+    )
+    print("-" * 100)
+    if package_id != 0:
+        package = hash_table.lookup(package_id)
+        if package:
+            print(package.display_at_time(query_time))
+        else:
+            print(f"Package {package_id} not found.")
+    else:
+        for i in range(1, 41):
+            package = hash_table.lookup(i)
+            if package:
+                print(package.display_at_time(query_time))
+
+
+def parse_time_input(time_str: str) -> Optional[datetime]:
+    """
+    Parse a time string into a datetime object.
+    """
+    time_str = time_str.strip().upper()
+
+    try:
+        # Try AM/PM format
+        if "AM" in time_str or "PM" in time_str:
+            time_str = time_str.replace(" ", "")
+            if "AM" in time_str:
+                parts = time_str.replace("AM", "").split(":")
+                hour = int(parts[0])
+                minute = int(parts[1]) if len(parts) > 1 else 0
+                if hour == 12:
+                    hour = 0
+            else:  # PM
+                parts = time_str.replace("PM", "").split(":")
+                hour = int(parts[0])
+                minute = int(parts[1]) if len(parts) > 1 else 0
+                if hour != 12:
+                    hour += 12
+        else:
+            # Try 24-hour format
+            parts = time_str.split(":")
+            hour = int(parts[0])
+            minute = int(parts[1]) if len(parts) > 1 else 0
+
+            # Assume AM/PM based on reasonable delivery hours
+            if hour < 8:
+                hour += 12
+
+        return datetime(2024, 1, 1, hour, minute, 0)
+    except (ValueError, IndexError):
+        return None
+
+
+def main_menu(
+    hash_table: HashTable,
+    truck1: Truck,
+    truck2: Truck,
+    truck3: Truck,
+    total_mileage: float,
+):
+    """
+    Display the main user interface menu.
+
+    Provides options to:
+    1. View the delivery status (including the delivery time) of any package at any time
+    2. View total mileage traveled by all trucks
+    3. Exit
+    """
+    while True:
+        print("\n" + "=" * 60)
+        print("WGUPS DELIVERY SYSTEM")
+        print("=" * 60)
+        print(
+            "1. View the delivery status (including the delivery time) of any package at any time"
+        )
+        print("2. View total mileage traveled by all trucks")
+        print("3. Exit")
+        print("-" * 60)
+
+        choice = input("Enter choice (1-3): ").strip()
+
+        if choice == "1":
+            # View single package
+            try:
+                pkg_id = int(
+                    input("Enter package ID (1-40) or 0 for all packages: ").strip()
+                )
+                time_str = input(
+                    "Enter time (e.g., 9:00 AM, 10:30, 12:00 PM): "
+                ).strip()
+                query_time = parse_time_input(time_str)
+
+                if query_time and 0 <= pkg_id <= 40:
+                    display_package_status(hash_table, query_time, pkg_id)
+                else:
+                    print("Invalid input. Please try again.")
+            except ValueError:
+                print("Invalid package ID. Please enter a number between 1 and 40.")
+
+        elif choice == "2":
+            # View total mileage
+            print("\n" + "=" * 60)
+            print("TOTAL MILEAGE SUMMARY")
+            print("=" * 60)
+            print(f"Truck 1: {truck1.get_mileage():.1f} miles")
+            print(f"Truck 2: {truck2.get_mileage():.1f} miles")
+            print(f"Truck 3: {truck3.get_mileage():.1f} miles")
+            print("-" * 60)
+            print(f"TOTAL:   {total_mileage:.1f} miles")
+            print("=" * 60)
+
+            if total_mileage < 140:
+                print("SUCCESS: Total mileage is under 140 miles!")
+            else:
+                print("WARNING: Total mileage exceeds 140 miles limit.")
+
+        elif choice == "3":
+            print("\nThank you for using WGUPS Delivery System. Goodbye!")
+            break
+
+        else:
+            print("Invalid choice. Please enter a number between 1 and 5.")
+
+
 def main():
     """
     Main entry point for the WGUPS Package Routing Program.
@@ -324,6 +460,9 @@ def main():
         print("SUCCESS: All packages delivered under 140 miles!")
     else:
         print("WARNING: Total mileage exceeds 140 mile limit.")
+
+    # Step 4: Launch user interface
+    main_menu(hash_table, truck1, truck2, truck3, total_mileage)
 
 
 if __name__ == "__main__":

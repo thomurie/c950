@@ -1,5 +1,6 @@
 # hash_table.py
 # Custom hash table implementation for WGUPS Package Routing Program
+from __future__ import annotations
 
 from package import Package
 from typing import Optional
