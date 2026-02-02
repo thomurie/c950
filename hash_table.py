@@ -55,8 +55,39 @@ class HashTable:
         # Package not found
         return None
 
+    def remove(self, package_id: int) -> bool:
+        """
+        Remove a package from the hash table.
+        """
+        bucket_index = self._hash(package_id)
+        bucket = self.table[bucket_index]
+
+        for i, (key) in enumerate(bucket):
+            if key == package_id:
+                bucket.pop(i)
+                self.size -= 1
+                return True
+
+        return False
+
+    def get_all(self) -> list[Package]:
+        """
+        Retrieve all packages from the hash table.
+        """
+        packages = []
+        for bucket in self.table:
+            for _, value in bucket:
+                packages.append(value)
+        return packages
+
     def __len__(self) -> int:
         """
         Return the number of packages in the hash table.
         """
         return self.size
+
+    def __contains__(self, package_id: int) -> bool:
+        """
+        Check if a package ID exists in the hash table.
+        """
+        return self.lookup(package_id) is not None
