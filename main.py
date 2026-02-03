@@ -172,7 +172,9 @@ def assign_packages_to_trucks(hash_table: HashTable) -> tuple[Truck, Truck, Truc
     for pkg_id in remaining_packages:
         if len(truck2_packages) >= truck2.capacity:
             break
-        truck2_packages.add(pkg_id)
+        pkg = hash_table.lookup(pkg_id)
+        if not pkg.has_wrong_address():
+            truck2_packages.add(pkg_id)
 
     load_all_packages(truck2_packages, hash_table, truck2)
 
@@ -180,7 +182,6 @@ def assign_packages_to_trucks(hash_table: HashTable) -> tuple[Truck, Truck, Truc
     # TRUCK 3: Remaining packages
     # ==========================================
     truck3_packages = remaining_packages.difference(truck2_packages)
-
     load_all_packages(truck3_packages, hash_table, truck3)
 
     return truck1, truck2, truck3
@@ -205,7 +206,7 @@ def correct_package_address(
         package.state = state
         package.zip_code = zip_code
         # Clear the wrong address note
-        package.notes = package.notes + "Address corrected at 10:20 AM"
+        package.notes = "Address corrected at 10:20 AM"
 
 
 def run_deliveries(
