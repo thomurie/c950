@@ -8,3 +8,4 @@ wheels/
 
 # Virtual environments
 .venv
+package_log.csv

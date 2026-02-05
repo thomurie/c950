@@ -6,8 +6,8 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 from distance import get_distance, get_address_index, find_nearest, HUB_INDEX
 from hash_table import HashTable
-
 from package import PackageStatus
+from log import Log
 
 
 class Truck:
@@ -61,7 +61,7 @@ class Truck:
         minutes = hours * 60
         return timedelta(minutes=minutes)
 
-    def deliver_packages(self, hash_table: HashTable) -> float:
+    def deliver_packages(self, hash_table: HashTable, log: Log) -> float:
         """
         Deliver all packages using the nearest neighbor algorithm.
 
@@ -77,9 +77,14 @@ class Truck:
         for package_id in self.packages:
             package = hash_table.lookup(package_id)
             if package:
-                # Mark package as en route
-                package.update_status(PackageStatus.ENROUTE, self.departure_time)
-                package.truck_id = self.truck_id
+                package.update_status(PackageStatus.ENROUTE)
+                log.record_event(
+                    package=package,
+                    event_time=self.departure_time,
+                    truck_id=self.truck_id,
+                    departure_time=self.departure_time,
+                    metadata=f"truck {self.truck_id} departed",
+                )
 
                 # Get address index
                 address_index = get_address_index(package.address)
@@ -111,6 +116,13 @@ class Truck:
                 package = hash_table.lookup(package_id)
                 if package:
                     package.update_status(PackageStatus.DELIVERED, self.current_time)
+                    log.record_event(
+                        package=package,
+                        event_time=self.current_time,
+                        truck_id=self.truck_id,
+                        delivery_time=self.current_time,
+                        metadata=f"package delivered by truck {self.truck_id}",
+                    )
                     self.delivered_packages.append(package_id)
 
                 # Remove from remaining list

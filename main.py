@@ -30,7 +30,8 @@ from datetime import datetime
 from typing import Optional
 
 from hash_table import HashTable
-from package import Package
+from log import Log
+from package import Package, PackageStatus
 from truck import Truck
 
 
@@ -50,7 +51,7 @@ ADDRESS_CORRECTION_TIME = datetime(
 )  # 10:20 AM - Package 9 address fixed
 
 
-def load_packages(hash_table: HashTable) -> bool:
+def receive_packages(hash_table: HashTable, log: Log) -> bool:
     """
     Load all packages from the CSV file into the hash table.
 
@@ -71,9 +72,18 @@ def load_packages(hash_table: HashTable) -> bool:
                     deadline=row["deadline"],
                     weight=row["weight"],
                     notes=row["notes"],
+                    # Assume package is at the warehouse
+                    status=PackageStatus.ATHUB,
                 )
+                if package.is_delayed():
+                    package.update_status(PackageStatus.DELAYED)
 
                 hash_table.insert(int(row["package_id"]), package)
+                log.record_event(
+                    package=package,
+                    event_time=START_OF_DAY,
+                    metadata="package information received",
+                )
 
         return True
     except FileNotFoundError:
@@ -97,19 +107,31 @@ def get_all_linked_packages(setA: set[int], hash_table: HashTable) -> set[int]:
     return linked_packages
 
 
-def load_all_packages(
-    package_ids: set[int], hash_table: HashTable, truck: Truck
+def load_packages(
+    package_ids: set[int], hash_table: HashTable, truck: Truck, log: Log
 ) -> bool:
     at_capacity = False
     for pkg_id in package_ids:
         package = hash_table.lookup(pkg_id)
         if package:
-            at_capacity = not truck.load_package(pkg_id)
+            loaded = truck.load_package(pkg_id)
+            if loaded:
+                package.update_status(PackageStatus.ATHUB)
+                log.record_event(
+                    package=package,
+                    event_time=truck.departure_time,
+                    metadata=f"package loaded onto truck {truck.truck_id}",
+                    truck_id=truck.truck_id,
+                )
+            else:
+                at_capacity = True
 
     return at_capacity
 
 
-def assign_packages_to_trucks(hash_table: HashTable) -> tuple[Truck, Truck, Truck]:
+def assign_packages_to_trucks(
+    hash_table: HashTable, log: Log
+) -> tuple[Truck, Truck, Truck]:
     """
     Assign packages to trucks based on constraints and deadlines.
 
@@ -131,13 +153,16 @@ def assign_packages_to_trucks(hash_table: HashTable) -> tuple[Truck, Truck, Truc
     # Create trucks with their departure times
     truck1 = Truck(1, START_OF_DAY)
     truck2 = Truck(2, DELAYED_ARRIVAL)
-    truck3 = Truck(3, None)
+    # temp departure time for logging
+    truck3 = Truck(3, datetime(2024, 1, 1, 10, 0, 0))
 
     # ==========================================
     # TRUCK 1: Early deadlines and linked packages
     # ==========================================
     remaining_packages = set([p.package_id for p in hash_table.get_all()])
 
+    # - Early deadline packages (9:00 AM, 10:30 AM deadlines)
+    #  - Linked packages that must be delivered together
     truck1_packages = set(
         [
             p.package_id
@@ -148,13 +173,16 @@ def assign_packages_to_trucks(hash_table: HashTable) -> tuple[Truck, Truck, Truc
     truck1_linked_packages = get_all_linked_packages(truck1_packages, hash_table)
     truck1_packages = truck1_packages.union(truck1_linked_packages)
 
-    load_all_packages(truck1_packages, hash_table, truck1)
+    load_packages(truck1_packages, hash_table, truck1, log)
 
     # ==========================================
     # TRUCK 2: Truck 2 only + Delayed packages
     # ==========================================
     remaining_packages = remaining_packages.difference(truck1_packages)
 
+    # - Packages that can only be on truck 2
+    # - Delayed packages
+    # - Fill with other EOD packages
     truck2_packages = set(
         [
             p.package_id
@@ -176,13 +204,15 @@ def assign_packages_to_trucks(hash_table: HashTable) -> tuple[Truck, Truck, Truc
         if not pkg.has_wrong_address():
             truck2_packages.add(pkg_id)
 
-    load_all_packages(truck2_packages, hash_table, truck2)
+    load_packages(truck2_packages, hash_table, truck2, log)
 
     # ==========================================
     # TRUCK 3: Remaining packages
     # ==========================================
+    # - Remaining packages
+    # - Package 9 (needs address correction at 10:20 AM)
     truck3_packages = remaining_packages.difference(truck2_packages)
-    load_all_packages(truck3_packages, hash_table, truck3)
+    load_packages(truck3_packages, hash_table, truck3, log)
 
     return truck1, truck2, truck3
 
@@ -194,6 +224,7 @@ def correct_package_address(
     city: str,
     state: str,
     zip_code: str,
+    log: Log,
 ):
     """
     Correct the address for a package.
@@ -207,10 +238,15 @@ def correct_package_address(
         package.zip_code = zip_code
         # Clear the wrong address note
         package.notes = "Address corrected at 10:20 AM"
+        log.record_event(
+            package=package,
+            event_time=ADDRESS_CORRECTION_TIME,
+            metadata="address corrected",
+        )
 
 
 def run_deliveries(
-    hash_table: HashTable, truck1: Truck, truck2: Truck, truck3: Truck
+    hash_table: HashTable, truck1: Truck, truck2: Truck, truck3: Truck, log: Log
 ) -> float:
     """
     Execute the delivery routes for all trucks.
@@ -225,7 +261,7 @@ def run_deliveries(
     # Execute Truck 1 deliveries (8:00 AM start)
     # ==========================================
     print("\nStarting Truck 1 deliveries...")
-    truck1_miles = truck1.deliver_packages(hash_table)
+    truck1_miles = truck1.deliver_packages(hash_table, log)
     truck1_return = truck1.get_return_time()
     print(f"  Truck 1 returned at {truck1_return.strftime('%-I:%M %p')}")
     print(f"  Truck 1 mileage: {truck1_miles:.1f} miles")
@@ -234,7 +270,7 @@ def run_deliveries(
     # Execute Truck 2 deliveries (9:05 AM start)
     # ==========================================
     print("\nStarting Truck 2 deliveries...")
-    truck2_miles = truck2.deliver_packages(hash_table)
+    truck2_miles = truck2.deliver_packages(hash_table, log)
     truck2_return = truck2.get_return_time()
     print(f"  Truck 2 returned at {truck2_return.strftime('%-I:%M %p')}")
     print(f"  Truck 2 mileage: {truck2_miles:.1f} miles")
@@ -254,13 +290,13 @@ def run_deliveries(
 
     # Correct package 9 address before Truck 3 departs
     correct_package_address(
-        hash_table, 9, "410 S State St", "Salt Lake City", "UT", "84111"
+        hash_table, 9, "410 S State St", "Salt Lake City", "UT", "84111", log
     )
 
     print(
         f"\nStarting Truck 3 deliveries at {truck3_earliest.strftime('%-I:%M %p')}..."
     )
-    truck3_miles = truck3.deliver_packages(hash_table)
+    truck3_miles = truck3.deliver_packages(hash_table, log)
     truck3_return = truck3.get_return_time()
     print(f"  Truck 3 returned at {truck3_return.strftime('%-I:%M %p')}")
     print(f"  Truck 3 mileage: {truck3_miles:.1f} miles")
@@ -272,30 +308,30 @@ def run_deliveries(
 
 
 def display_package_status(
-    hash_table: HashTable, query_time: datetime, package_id: int = None
+    hash_table: HashTable, log: Log, query_time: datetime, package_id: int = -1
 ):
     """
     Display the delivery status (including the delivery time) of any package at any time
     """
-    print("\n" + "=" * 100)
+    print("\n" + "=" * 110)
     print(f"PACKAGE STATUS AT {query_time.strftime('%-I:%M %p')}")
-    print("=" * 100)
+    print("=" * 110)
 
     print(
-        f"{'ID':>3} | {'Address':<40} | {'Deadline':<10} | {'Status':<10} | {'Time':<10} | Truck"
+        f"{'ID':>3} | {'Address':<40} | {'Deadline':<10} | {'Delivered':<10} | {'Status':<10} | {'Updated':<10} | Truck"
     )
-    print("-" * 100)
-    if package_id != 0:
+    print("-" * 110)
+    if package_id != -1:
         package = hash_table.lookup(package_id)
         if package:
-            print(package.display_at_time(query_time))
+            print(log.format_status_line(package, query_time))
         else:
             print(f"Package {package_id} not found.")
     else:
         for i in range(1, 41):
             package = hash_table.lookup(i)
             if package:
-                print(package.display_at_time(query_time))
+                print(log.format_status_line(package, query_time))
 
 
 def parse_time_input(time_str: str) -> Optional[datetime]:
@@ -337,6 +373,7 @@ def parse_time_input(time_str: str) -> Optional[datetime]:
 
 def main_menu(
     hash_table: HashTable,
+    log: Log,
     truck1: Truck,
     truck2: Truck,
     truck3: Truck,
@@ -367,15 +404,15 @@ def main_menu(
             # View single package
             try:
                 pkg_id = int(
-                    input("Enter package ID (1-40) or 0 for all packages: ").strip()
+                    input("Enter package ID (1-40) or -1 for all packages: ").strip()
                 )
                 time_str = input(
                     "Enter time (e.g., 9:00 AM, 10:30, 12:00 PM): "
                 ).strip()
                 query_time = parse_time_input(time_str)
 
-                if query_time and 0 <= pkg_id <= 40:
-                    display_package_status(hash_table, query_time, pkg_id)
+                if query_time and (pkg_id == -1 or 0 <= pkg_id <= 40):
+                    display_package_status(hash_table, log, query_time, pkg_id)
                 else:
                     print("Invalid input. Please try again.")
             except ValueError:
@@ -403,7 +440,7 @@ def main_menu(
             break
 
         else:
-            print("Invalid choice. Please enter a number between 1 and 5.")
+            print("Invalid choice. Please enter a number between 1 and 3.")
 
 
 def main():
@@ -424,7 +461,9 @@ def main():
     print("\nLoading package data...")
     hash_table = HashTable(40)
 
-    if not load_packages(hash_table):
+    log = Log()
+
+    if not receive_packages(hash_table, log):
         print("Failed to load packages. Exiting.")
         return
 
@@ -432,7 +471,7 @@ def main():
 
     # Step 2: Assign packages to trucks
     print("\nAssigning packages to trucks...")
-    truck1, truck2, truck3 = assign_packages_to_trucks(hash_table)
+    truck1, truck2, truck3 = assign_packages_to_trucks(hash_table, log)
 
     print(f"  Truck 1: {truck1.get_package_count()} packages (departs 8:00 AM)")
     print(f"  Truck 2: {truck2.get_package_count()} packages (departs 9:05 AM)")
@@ -445,7 +484,7 @@ def main():
     print("EXECUTING DELIVERIES")
     print("-" * 60)
 
-    total_mileage = run_deliveries(hash_table, truck1, truck2, truck3)
+    total_mileage = run_deliveries(hash_table, truck1, truck2, truck3, log)
 
     print("\n" + "=" * 60)
     print("DELIVERY COMPLETE")
@@ -458,7 +497,7 @@ def main():
         print("WARNING: Total mileage exceeds 140 mile limit.")
 
     # Step 4: Launch user interface
-    main_menu(hash_table, truck1, truck2, truck3, total_mileage)
+    main_menu(hash_table, log, truck1, truck2, truck3, total_mileage)
 
 
 if __name__ == "__main__":
